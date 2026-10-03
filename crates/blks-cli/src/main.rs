@@ -3,7 +3,7 @@
 //! Produces 384-bit digests that encode to exactly 64 Base64 characters without padding,
 //! breaking the 128-bit collision limit of BLAKE3/SHA-256 with 192 bits of collision resistance.
 
-use blks_core::{constant_time_eq, hash_file, hash_reader, Digest};
+use blks_core::{constant_time_eq, hash_file_opts, hash_reader, Digest};
 use clap::{Parser, ValueEnum};
 use std::fs::File;
 use std::io::{self, BufRead, BufReader};
@@ -65,6 +65,10 @@ struct Cli {
     /// Benchmark mode: print elapsed time and throughput in GB/s
     #[arg(long = "benchmark")]
     benchmark: bool,
+
+    /// Disable memory-mapping (forces streaming reads; prevents SIGBUS on network shares or volatile files)
+    #[arg(long = "no-mmap")]
+    no_mmap: bool,
 }
 
 fn format_digest(digest: &Digest, format: OutputFormat) -> String {
@@ -82,7 +86,7 @@ fn hash_stdin() -> io::Result<Digest> {
     Ok(Digest(bytes))
 }
 
-fn run_check(check_file: &Path, quiet: bool) -> io::Result<bool> {
+fn run_check(check_file: &Path, quiet: bool, use_mmap: bool) -> io::Result<bool> {
     let file = File::open(check_file)?;
     let reader = BufReader::new(file);
 
@@ -112,7 +116,7 @@ fn run_check(check_file: &Path, quiet: bool) -> io::Result<bool> {
         let filepath = parts[1].trim().trim_start_matches('*').trim();
 
         total += 1;
-        match hash_file(filepath) {
+        match hash_file_opts(filepath, use_mmap) {
             Ok(computed) => {
                 let matches = if expected_hash.len() == 64 {
                     if let Ok(expected_digest) = Digest::from_base64(expected_hash) {
@@ -174,7 +178,7 @@ fn main() -> ExitCode {
     };
 
     if let Some(check_path) = &cli.check {
-        match run_check(check_path, cli.quiet) {
+        match run_check(check_path, cli.quiet, !cli.no_mmap) {
             Ok(true) => return ExitCode::SUCCESS,
             _ => return ExitCode::FAILURE,
         }
@@ -200,7 +204,7 @@ fn main() -> ExitCode {
         let result = if is_stdin {
             hash_stdin()
         } else {
-            hash_file(path)
+            hash_file_opts(path, !cli.no_mmap)
         };
 
         match result {

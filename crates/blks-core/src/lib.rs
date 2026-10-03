@@ -85,10 +85,20 @@ pub fn hash(data: &[u8]) -> Digest {
 /// Automatically uses zero-copy memory mapping (`memmap2`) for regular files
 /// to saturate NVMe / PCIe bandwidth and CPU cores.
 pub fn hash_file<P: AsRef<Path>>(path: P) -> io::Result<Digest> {
+    hash_file_opts(path, true)
+}
+
+/// Compute blks-384 hash over a file with optional memory-mapping.
+///
+/// If `use_mmap` is true, regular non-empty files are hashed using zero-copy memory mapping (`memmap2`).
+/// If `use_mmap` is false, the file is read sequentially using buffered streaming (`hash_reader`),
+/// completely eliminating `SIGBUS` crash risks when reading from volatile network mounts (NFS, SMB)
+/// or files that might be truncated concurrently by another process.
+pub fn hash_file_opts<P: AsRef<Path>>(path: P, use_mmap: bool) -> io::Result<Digest> {
     let file = File::open(path)?;
     let metadata = file.metadata()?;
 
-    if metadata.len() > 0 && metadata.is_file() {
+    if use_mmap && metadata.len() > 0 && metadata.is_file() {
         // Safe fast-path with memory-mapping for files > 0 bytes
         match unsafe { Mmap::map(&file) } {
             Ok(mmap) => Ok(hash(&mmap)),
@@ -99,7 +109,7 @@ pub fn hash_file<P: AsRef<Path>>(path: P) -> io::Result<Digest> {
             }
         }
     } else {
-        // Empty file or special device
+        // Safe streaming path (empty file, special device, or --no-mmap)
         let bytes = hash_reader(file)?;
         Ok(Digest(bytes))
     }

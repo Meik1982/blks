@@ -259,3 +259,28 @@ fn test_cli_threads_concurrency() {
 
     let _ = fs::remove_file(test_file);
 }
+
+#[test]
+fn test_cli_no_mmap_flag() {
+    let bin = get_bin_path();
+    let temp_dir = std::env::temp_dir();
+    let test_file = temp_dir.join("blks_no_mmap_sample.bin");
+    let data = vec![0x99u8; 80_000];
+    fs::write(&test_file, &data).unwrap();
+
+    let out_mmap = Command::new(&bin).arg(&test_file).output().unwrap();
+    let out_no_mmap = Command::new(&bin)
+        .arg("--no-mmap")
+        .arg(&test_file)
+        .output()
+        .unwrap();
+
+    let h1 = String::from_utf8(out_mmap.stdout).unwrap();
+    let h2 = String::from_utf8(out_no_mmap.stdout).unwrap();
+    assert_eq!(
+        h1, h2,
+        "--no-mmap must produce bit-exact identical hash to mmap mode"
+    );
+
+    let _ = fs::remove_file(test_file);
+}
