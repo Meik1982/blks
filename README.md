@@ -255,3 +255,18 @@ blks --json datei.iso
 * `crates/blks-cli`: CLI-Werkzeug `blks`.
 * `include/blks.h`: C-Header für die FFI-Integration.
 * `tests/`: Integrationstests und C-FFI-Verifikationstest.
+
+---
+
+## 📜 Lizenz & Urheberrecht
+
+Copyright (C) 2026 Meik.
+
+Das Projekt ist modular lizenziert, um maximale Freiheit bei der Software-Einbindung zu garantieren und gleichzeitig die Kern-Engine dauerhaft vor proprietärer Schließung zu schützen:
+
+* **`blks-core` (Bibliothek & C-FFI):** Lizenziert unter der **GNU Lesser General Public License v3 oder neuer (LGPL-3.0-or-later)**.
+  * Erlaubt das Einbinden von `libblks_core.a` / `include/blks.h` in Projekte unter **beliebigen Lizenzen** (MIT, Apache 2.0, BSD, GPL, Closed-Source-Wrappers).
+  * Verpflichtet jedoch dazu, dass alle Modifikationen an der `blks`-Engine selbst quelloffen bleiben.
+* **`blks-cli` (Kommandozeilen-Tool):** Lizenziert unter der **GNU General Public License v3 oder neuer (GPL-3.0-or-later)**.
+  * Garantiert, dass das fertige Terminal-Programm immer freie Open-Source-Software bleibt.
+

@@ -3,7 +3,8 @@ name = "blks-cli"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
-license.workspace = true
+license = "GPL-3.0-or-later"
+description = "High-Performance 384-Bit Cryptographic Tree-Hash CLI Utility (GPLv3)"
 
 [[bin]]
 name = "blks"

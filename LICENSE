@@ -1,0 +1,19 @@
+blks Licensing Notice
+=====================
+
+Copyright (C) 2026 Meik
+
+This project is partitioned into two clearly scoped licensing tiers:
+
+1. `blks-core` (Library Engine & C-FFI):
+   Licensed under the GNU Lesser General Public License v3 or later (LGPL-3.0-or-later).
+   See LICENSE.LGPL and LICENSE.GPL for full terms.
+   This permits linking libblks_core.a, include/blks.h, and using the Rust crate
+   from projects under any license (including MIT, Apache-2.0, BSD, or commercial),
+   while ensuring that any modifications, improvements, or bugfixes to the blks-core
+   engine itself must remain open source under LGPL-3.0-or-later.
+
+2. `blks-cli` (Command-Line Interface Binary):
+   Licensed under the GNU General Public License v3 or later (GPL-3.0-or-later).
+   See LICENSE.GPL for full terms.
+   The terminal application is strictly protected under strong copyleft.
