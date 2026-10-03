@@ -8,7 +8,7 @@
 
 Der Ansatz und die mathematische Konzeption von `blks` entstanden im Oktober 2026 im Rahmen der kryptografischen Härtung von **`blkcp`** (dem modernen Linux High-Performance I/O- und Block-Kopierwerkzeug).
 
-Bei der Analyse der in `blkcp` integrierten BLAKE3-Prüfsummen stellte **Meik** die entscheidende kryptoanalytische Frage:
+Bei der Analyse der in `blkcp` integrierten BLAKE3-Prüfsummen stellte **Meik Augenblick** die entscheidende kryptoanalytische Frage:
 > *„Der Chaining Value von BLAKE3 ist fest auf 256 Bit begrenzt – mehr als 128 Bit Kollisionsresistenz lässt der Algorithmus strukturell nicht zu, alles darüber hinaus verdünnt die Sicherheit nur ohne Mehrwert. Können wir einen echten Tree-Hash schreiben, der signifikant mehr Kollisionsresistenz besitzt – z. B. 384 Bit –, der in Base64 exakt 64 Zeichen ohne jedes Padding ergibt und damit haargenau dieselbe Zeilenbreite wie ein hexadezimaler SHA-256-Hash einnimmt?“*
 
 Aus diesem Gedanken entstand der architektonische Durchbruch:
@@ -260,7 +260,7 @@ blks --json datei.iso
 
 ## 📜 Lizenz & Urheberrecht
 
-Copyright (C) 2026 Meik.
+Copyright (C) 2026 Meik Augenblick.
 
 Das Projekt ist modular lizenziert, um maximale Freiheit bei der Software-Einbindung zu garantieren und gleichzeitig die Kern-Engine dauerhaft vor proprietärer Schließung zu schützen:
 
