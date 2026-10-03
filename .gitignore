@@ -1,4 +1,5 @@
 /target
+dist/*.tar.gz
 **/*.rs.bk
 Cargo.lock
 tests/test_c_ffi
