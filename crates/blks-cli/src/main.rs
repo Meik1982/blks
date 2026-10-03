@@ -3,7 +3,7 @@
 //! Produces 384-bit digests that encode to exactly 64 Base64 characters without padding,
 //! breaking the 128-bit collision limit of BLAKE3/SHA-256 with 192 bits of collision resistance.
 
-use blks_core::{hash_file, hash_reader, Digest};
+use blks_core::{constant_time_eq, hash_file, hash_reader, Digest};
 use clap::{Parser, ValueEnum};
 use std::fs::File;
 use std::io::{self, BufRead, BufReader};
@@ -115,10 +115,16 @@ fn run_check(check_file: &Path, quiet: bool) -> io::Result<bool> {
         match hash_file(filepath) {
             Ok(computed) => {
                 let matches = if expected_hash.len() == 64 {
-                    computed.to_base64() == expected_hash
-                        || computed.to_base64_url() == expected_hash
+                    if let Ok(expected_digest) = Digest::from_base64(expected_hash) {
+                        computed.ct_eq(&expected_digest)
+                    } else {
+                        false
+                    }
                 } else if expected_hash.len() == 96 {
-                    computed.to_hex().eq_ignore_ascii_case(expected_hash)
+                    constant_time_eq(
+                        computed.to_hex().as_bytes(),
+                        expected_hash.to_ascii_lowercase().as_bytes(),
+                    )
                 } else {
                     false
                 };

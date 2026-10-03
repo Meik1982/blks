@@ -15,7 +15,9 @@ pub mod encoding;
 pub mod ffi;
 pub mod tree;
 
-pub use encoding::{decode_base64, encode_base64, encode_base64_url, encode_hex};
+pub use encoding::{
+    constant_time_eq, decode_base64, encode_base64, encode_base64_url, encode_hex,
+};
 pub use tree::{hash_reader, hash_slice_parallel, BlksHasher, CHUNK_SIZE};
 
 use memmap2::Mmap;
@@ -53,6 +55,12 @@ impl Digest {
     pub fn from_base64(s: &str) -> Result<Self, &'static str> {
         let bytes = decode_base64(s)?;
         Ok(Digest(bytes))
+    }
+
+    /// Compares two digests in constant time to prevent timing side-channel attacks.
+    #[inline]
+    pub fn ct_eq(&self, other: &Self) -> bool {
+        constant_time_eq(&self.0, &other.0)
     }
 }
 

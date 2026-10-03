@@ -93,9 +93,38 @@ pub fn decode_base64(s: &str) -> Result<[u8; 48], &'static str> {
     Ok(out)
 }
 
+/// Compare two byte slices in constant time, preventing timing side-channel attacks.
+///
+/// Returns true if and only if both slices have the same length and identical contents.
+/// Operates in constant time regardless of where or whether bytes differ.
+#[inline]
+pub fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut diff = 0u8;
+    for (&x, &y) in a.iter().zip(b.iter()) {
+        diff |= x ^ y;
+    }
+    // Convert to bool without branching
+    std::hint::black_box(diff) == 0
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_constant_time_eq() {
+        let a = b"0123456789abcdef0123456789abcdef0123456789abcdef";
+        let b = b"0123456789abcdef0123456789abcdef0123456789abcdef";
+        let c = b"0123456789abcdef0123456789abcdef0123456789abcdeg";
+        let d = b"0123";
+
+        assert!(constant_time_eq(a, b));
+        assert!(!constant_time_eq(a, c));
+        assert!(!constant_time_eq(a, d));
+    }
 
     #[test]
     fn test_base64_roundtrip_and_exact_64_len() {
