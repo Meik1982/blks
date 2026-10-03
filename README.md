@@ -121,14 +121,113 @@ Die Unumkehrbarkeit von `blks` stützt sich auf die bewiesene Reduktion auf **NP
 
 ---
 
-## 🚀 Installation & Verwendung
+## 🚀 Installation & Paketierung
 
-### Kompilieren & Testen
+`blks` ist portabel in reinem Rust geschrieben und lässt sich auf allen modernen Betriebssystemen und Distributionen mit einer Zeile kompilieren oder über native Paketmanager installieren:
+
+### 1. Arch Linux / CachyOS (Natives Paket)
+Zur sauberen Einbindung in die lokale Paketverwaltung (`pacman`) ohne unversionierte Binaries:
 ```bash
-make test
+cd dist/archlinux
+makepkg -si
+```
+*Installiert automatisch das Binary `/usr/bin/blks`, den C-Header `/usr/include/blks.h`, die Bibliothek `/usr/lib/libblks_core.a` sowie alle Shell-Completions.*
+
+---
+
+### 2. Debian / Ubuntu / Mint
+```bash
+# 1. Abhängigkeiten installieren
+sudo apt update && sudo apt install -y cargo gcc build-essential
+
+# 2. Kompilieren (Release mit LTO & Vektorisierung)
+cargo build --release
+
+# 3. Systemweit installieren
+sudo install -Dm755 target/release/blks /usr/local/bin/blks
+sudo install -Dm644 include/blks.h /usr/local/include/blks.h
+sudo install -Dm644 target/release/libblks_core.a /usr/local/lib/libblks_core.a
 ```
 
-### CLI-Aufruf
+---
+
+### 3. Fedora / RHEL / AlmaLinux
+```bash
+sudo dnf install -y cargo gcc
+cargo build --release
+sudo install -Dm755 target/release/blks /usr/local/bin/blks
+```
+
+---
+
+### 4. macOS (Intel & Apple Silicon M1 / M2 / M3 / M4)
+Unter macOS nutzt `blks` auf Apple Silicon (ARM64) automatisch die 64-Bit-ARX-Optimierungen und das native BSD-Memory-Mapping:
+```bash
+# Via Homebrew Rust
+brew install rust
+cargo build --release
+sudo install -m 755 target/release/blks /usr/local/bin/blks
+```
+
+---
+
+### 5. Windows (10 / 11 / Server)
+Kompiliert nahtlos unter MSVC oder GNU/MinGW. Nutzt das native Windows Memory-Mapping (`CreateFileMapping` / `MapViewOfFile`):
+```powershell
+# In PowerShell:
+cargo build --release
+# Binary liegt unter .\target\release\blks.exe
+```
+
+---
+
+## 🐚 Shell-Autovervollständigung (Bash, Zsh, Fish, PowerShell)
+
+`blks` bringt vorkompilierte Skripte in `completions/` mit und kann Completions auch dynamisch über `--completion <SHELL>` generieren:
+
+### Bash
+```bash
+# Manuelle Installation:
+sudo cp completions/bash/blks /usr/share/bash-completion/completions/blks
+# Oder für die aktuelle Session:
+source <(blks --completion bash)
+```
+
+### Zsh
+```bash
+sudo cp completions/zsh/_blks /usr/share/zsh/site-functions/_blks
+# In ~/.zshrc:
+autoload -Uz compinit && compinit
+```
+
+### Fish
+```bash
+cp completions/fish/blks.fish ~/.config/fish/completions/
+```
+
+### PowerShell (Windows / Linux)
+```powershell
+blks --completion powershell | Out-String | Invoke-Expression
+```
+
+---
+
+## 🌐 Plattform- & Hardware-Kompatibilitätsmatrix
+
+| Betriebssystem / Architektur | Hardware-Beschleunigung | I/O-Modus | Status |
+| :--- | :--- | :--- | :---: |
+| **Linux (x86_64, glibc/musl)** | **4-Wege AVX2 SIMD** + BMI2 (RORX) | Zero-Copy `memmap2` + `MADV_SEQUENTIAL` | **Tier 1 (5,21 GB/s)** |
+| **Linux (aarch64 / ARM64)** | 64-Bit ARX (LLVM NEON auto-vectorized) | Zero-Copy `memmap2` | **Tier 1 (Produktiv)** |
+| **macOS (Apple Silicon M1-M4)** | 64-Bit ARX (ARMv8.5+ Krypto-Register) | Darwin Mmap | **Tier 1 (Produktiv)** |
+| **macOS (Intel x86_64)** | 4-Wege AVX2 SIMD | Darwin Mmap | **Tier 1 (Produktiv)** |
+| **Windows (x86_64, MSVC)** | 4-Wege AVX2 SIMD | Win32 Virtual Memory Mapping | **Tier 1 (Produktiv)** |
+| **BSD (FreeBSD, OpenBSD)** | 64-Bit ARX / AVX2 | POSIX Mmap | **Tier 2 (Getestet)** |
+
+* **Hardware-Fallback:** Wird `blks` auf einer CPU ohne AVX2 (oder auf ARM/RISC-V) ausgeführt, erkennt der Code dies zur Laufzeit und schaltet transparent auf den hochoptimierten 64-Bit-Skalar-Pfad um. Die erzeugten Hashes sind über alle Architekturen hinweg **100 % bit-identisch**.
+
+---
+
+## 🛠️ CLI-Aufruf & Beispiele
 ```bash
 # Datei hashen (Standard 64-Zeichen Base64)
 blks datei.iso

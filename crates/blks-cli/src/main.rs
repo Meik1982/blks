@@ -4,7 +4,8 @@
 //! breaking the 128-bit collision limit of BLAKE3/SHA-256 with 192 bits of collision resistance.
 
 use blks_core::{constant_time_eq, hash_file_opts, hash_reader, Digest};
-use clap::{Parser, ValueEnum};
+use clap::{CommandFactory, Parser, ValueEnum};
+use clap_complete::{generate, Shell};
 use std::fs::File;
 use std::io::{self, BufRead, BufReader};
 use std::path::{Path, PathBuf};
@@ -69,6 +70,10 @@ struct Cli {
     /// Disable memory-mapping (forces streaming reads; prevents SIGBUS on network shares or volatile files)
     #[arg(long = "no-mmap")]
     no_mmap: bool,
+
+    /// Generate shell auto-completion script (bash, zsh, fish, powershell, elvish)
+    #[arg(long = "completion", value_name = "SHELL")]
+    completion: Option<Shell>,
 }
 
 fn format_digest(digest: &Digest, format: OutputFormat) -> String {
@@ -162,6 +167,12 @@ fn run_check(check_file: &Path, quiet: bool, use_mmap: bool) -> io::Result<bool>
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
+
+    if let Some(shell) = cli.completion {
+        let mut cmd = Cli::command();
+        generate(shell, &mut cmd, "blks", &mut io::stdout());
+        return ExitCode::SUCCESS;
+    }
 
     if let Some(num_threads) = cli.threads {
         let _ = rayon::ThreadPoolBuilder::new()

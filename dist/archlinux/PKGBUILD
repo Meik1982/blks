@@ -1,0 +1,40 @@
+# Maintainer: Meik <meik@local>
+pkgname=blks
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="High-Performance 384-Bit Cryptographic Tree-Hash Utility (64-Char Base64, 192-bit Collision Resistance)"
+arch=('x86_64' 'aarch64')
+url="https://github.com/Meik1982/blks"
+license=('MIT')
+depends=('gcc-libs')
+makedepends=('cargo')
+source=()
+
+build() {
+    cd "$startdir/../.."
+    cargo build --release --locked
+}
+
+check() {
+    cd "$startdir/../.."
+    cargo test --all --locked
+}
+
+package() {
+    cd "$startdir/../.."
+
+    # 1. Binary
+    install -Dm755 "target/release/blks" "$pkgdir/usr/bin/blks"
+
+    # 2. C-FFI Header & Library
+    install -Dm644 "include/blks.h" "$pkgdir/usr/include/blks.h"
+    install -Dm644 "target/release/libblks_core.a" "$pkgdir/usr/lib/libblks_core.a"
+
+    # 3. Shell Auto-Completions
+    install -Dm644 "completions/bash/blks" "$pkgdir/usr/share/bash-completion/completions/blks"
+    install -Dm644 "completions/zsh/_blks" "$pkgdir/usr/share/zsh/site-functions/_blks"
+    install -Dm644 "completions/fish/blks.fish" "$pkgdir/usr/share/fish/vendor_completions.d/blks.fish"
+
+    # 4. Documentation
+    install -Dm644 "README.md" "$pkgdir/usr/share/doc/$pkgname/README.md"
+}

@@ -1,0 +1,52 @@
+#compdef blks
+
+autoload -U is-at-least
+
+_blks() {
+    typeset -A opt_args
+    typeset -a _arguments_options
+    local ret=1
+
+    if is-at-least 5.2; then
+        _arguments_options=(-s -S -C)
+    else
+        _arguments_options=(-s -C)
+    fi
+
+    local context curcontext="$curcontext" state line
+    _arguments "${_arguments_options[@]}" : \
+'-c+[Read checksums from the specified file and check them]:FILE:_files' \
+'--check=[Read checksums from the specified file and check them]:FILE:_files' \
+'--format=[Digest output format]:FORMAT:((base64\:"64-character standard Base64 (matches SHA-256 hex line width, zero padding)"
+base64-url\:"64-character URL-safe Base64 (using - and _ instead of + and /)"
+hex\:"96-character hexadecimal digest"
+raw\:"Raw 48-byte binary digest to stdout"))' \
+'-j+[Number of worker threads for parallel tree reduction (default\: all logical cores)]:THREADS:_default' \
+'--threads=[Number of worker threads for parallel tree reduction (default\: all logical cores)]:THREADS:_default' \
+'--completion=[Generate shell auto-completion script (bash, zsh, fish, powershell, elvish)]:SHELL:(bash elvish fish powershell zsh)' \
+'--hex[Convenience flag for hexadecimal output (equivalent to --format hex)]' \
+'--raw[Convenience flag for raw binary output to stdout]' \
+'-q[Quiet mode\: in check mode, only print failed files]' \
+'--quiet[Quiet mode\: in check mode, only print failed files]' \
+'--json[Output machine-readable JSON telemetry]' \
+'--benchmark[Benchmark mode\: print elapsed time and throughput in GB/s]' \
+'--no-mmap[Disable memory-mapping (forces streaming reads; prevents SIGBUS on network shares or volatile files)]' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+'-V[Print version]' \
+'--version[Print version]' \
+'*::files -- Files to hash (reads from stdin if omitted or '\''-'\''):_files' \
+&& ret=0
+}
+
+(( $+functions[_blks_commands] )) ||
+_blks_commands() {
+    local commands; commands=()
+    _describe -t commands 'blks commands' commands "$@"
+}
+
+if [ "$funcstack[1]" = "_blks" ]; then
+    _blks "$@"
+else
+    compdef _blks blks
+fi
