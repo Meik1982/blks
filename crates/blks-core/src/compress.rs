@@ -54,7 +54,7 @@ pub fn initial_cv() -> [u64; 8] {
 }
 
 /// BLAKE2b Sigma permutations for 12 rounds
-const SIGMA: [[usize; 16]; 12] = [
+pub const SIGMA: [[usize; 16]; 12] = [
     [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
     [14, 10, 4, 8, 9, 15, 13, 6, 1, 12, 0, 2, 11, 7, 5, 3],
     [11, 8, 12, 0, 5, 2, 15, 13, 10, 14, 3, 6, 7, 1, 9, 4],
@@ -104,17 +104,32 @@ pub fn compress(
     v[13] ^= 0; // high word of 128-bit counter
     v[14] ^= flags;
 
-    for s in &SIGMA {
-        g(&mut v, 0, 4, 8, 12, m[s[0]], m[s[1]]);
-        g(&mut v, 1, 5, 9, 13, m[s[2]], m[s[3]]);
-        g(&mut v, 2, 6, 10, 14, m[s[4]], m[s[5]]);
-        g(&mut v, 3, 7, 11, 15, m[s[6]], m[s[7]]);
+    macro_rules! round {
+        ($r:expr) => {
+            g(&mut v, 0, 4, 8, 12, m[SIGMA[$r][0]], m[SIGMA[$r][1]]);
+            g(&mut v, 1, 5, 9, 13, m[SIGMA[$r][2]], m[SIGMA[$r][3]]);
+            g(&mut v, 2, 6, 10, 14, m[SIGMA[$r][4]], m[SIGMA[$r][5]]);
+            g(&mut v, 3, 7, 11, 15, m[SIGMA[$r][6]], m[SIGMA[$r][7]]);
 
-        g(&mut v, 0, 5, 10, 15, m[s[8]], m[s[9]]);
-        g(&mut v, 1, 6, 11, 12, m[s[10]], m[s[11]]);
-        g(&mut v, 2, 7, 8, 13, m[s[12]], m[s[13]]);
-        g(&mut v, 3, 4, 9, 14, m[s[14]], m[s[15]]);
+            g(&mut v, 0, 5, 10, 15, m[SIGMA[$r][8]], m[SIGMA[$r][9]]);
+            g(&mut v, 1, 6, 11, 12, m[SIGMA[$r][10]], m[SIGMA[$r][11]]);
+            g(&mut v, 2, 7, 8, 13, m[SIGMA[$r][12]], m[SIGMA[$r][13]]);
+            g(&mut v, 3, 4, 9, 14, m[SIGMA[$r][14]], m[SIGMA[$r][15]]);
+        };
     }
+
+    round!(0);
+    round!(1);
+    round!(2);
+    round!(3);
+    round!(4);
+    round!(5);
+    round!(6);
+    round!(7);
+    round!(8);
+    round!(9);
+    round!(10);
+    round!(11);
 
     let mut out_cv = [0u64; 8];
     for i in 0..8 {

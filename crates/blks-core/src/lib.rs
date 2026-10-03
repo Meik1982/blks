@@ -13,11 +13,11 @@
 pub mod compress;
 pub mod encoding;
 pub mod ffi;
+#[cfg(target_arch = "x86_64")]
+pub mod simd_avx2;
 pub mod tree;
 
-pub use encoding::{
-    constant_time_eq, decode_base64, encode_base64, encode_base64_url, encode_hex,
-};
+pub use encoding::{constant_time_eq, decode_base64, encode_base64, encode_base64_url, encode_hex};
 pub use tree::{hash_reader, hash_slice_parallel, BlksHasher, CHUNK_SIZE};
 
 use memmap2::Mmap;
@@ -101,7 +101,11 @@ pub fn hash_file_opts<P: AsRef<Path>>(path: P, use_mmap: bool) -> io::Result<Dig
     if use_mmap && metadata.len() > 0 && metadata.is_file() {
         // Safe fast-path with memory-mapping for files > 0 bytes
         match unsafe { Mmap::map(&file) } {
-            Ok(mmap) => Ok(hash(&mmap)),
+            Ok(mmap) => {
+                // Advise kernel for aggressive sequential readahead
+                let _ = mmap.advise(memmap2::Advice::Sequential);
+                Ok(hash(&mmap))
+            }
             Err(_) => {
                 // Fallback to streaming reader if mmap fails (e.g. special files)
                 let bytes = hash_reader(file)?;
@@ -227,6 +231,36 @@ mod tests {
                 "Hash changed under {} worker threads!",
                 threads
             );
+        }
+    }
+
+    #[test]
+    #[cfg(target_arch = "x86_64")]
+    fn test_avx2_4_chunks_parity() {
+        if is_x86_feature_detected!("avx2") {
+            let mut c0 = [0u8; 4096];
+            let mut c1 = [0u8; 4096];
+            let mut c2 = [0u8; 4096];
+            let mut c3 = [0u8; 4096];
+
+            for i in 0..4096 {
+                c0[i] = (i * 3 + 1) as u8;
+                c1[i] = (i * 7 + 2) as u8;
+                c2[i] = (i * 11 + 3) as u8;
+                c3[i] = (i * 13 + 4) as u8;
+            }
+
+            let expected0 = tree::hash_chunk(&c0, false);
+            let expected1 = tree::hash_chunk(&c1, false);
+            let expected2 = tree::hash_chunk(&c2, false);
+            let expected3 = tree::hash_chunk(&c3, false);
+
+            let avx_hashes = unsafe { simd_avx2::hash_4_chunks_avx2(&c0, &c1, &c2, &c3) };
+
+            assert_eq!(expected0, avx_hashes[0], "AVX2 mismatch on chunk 0");
+            assert_eq!(expected1, avx_hashes[1], "AVX2 mismatch on chunk 1");
+            assert_eq!(expected2, avx_hashes[2], "AVX2 mismatch on chunk 2");
+            assert_eq!(expected3, avx_hashes[3], "AVX2 mismatch on chunk 3");
         }
     }
 

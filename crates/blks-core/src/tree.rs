@@ -12,6 +12,12 @@ use std::io::{self, Read};
 /// Standard chunk size for leaf nodes: 4096 bytes (4 KiB, matching Linux page size)
 pub const CHUNK_SIZE: usize = 4096;
 
+/// Subtree chunk count for coarse-grained multithreading: 64 chunks = 256 KiB
+pub const SUBTREE_CHUNKS: usize = 64;
+
+/// Subtree size in bytes (256 KiB, matching CPU L2 cache size)
+pub const SUBTREE_BYTES: usize = CHUNK_SIZE * SUBTREE_CHUNKS;
+
 /// Hash a single chunk (up to 4096 bytes).
 /// If `is_root` is true, this chunk is the entire input and receives FLAG_ROOT.
 pub fn hash_chunk(chunk: &[u8], is_root: bool) -> [u8; 48] {
@@ -58,16 +64,58 @@ pub fn hash_chunk(chunk: &[u8], is_root: bool) -> [u8; 48] {
     out
 }
 
+#[cfg(target_arch = "x86_64")]
+fn hash_chunks_accelerated(slice: &[u8]) -> Vec<[u8; 48]> {
+    let num_full_chunks = slice.len() / CHUNK_SIZE;
+    let mut leaves = Vec::with_capacity(slice.len().div_ceil(CHUNK_SIZE));
+
+    let mut i = 0;
+    if is_x86_feature_detected!("avx2") {
+        while i + 4 <= num_full_chunks {
+            let offset = i * CHUNK_SIZE;
+            let c0: &[u8; 4096] = slice[offset..offset + 4096].try_into().unwrap();
+            let c1: &[u8; 4096] = slice[offset + 4096..offset + 8192].try_into().unwrap();
+            let c2: &[u8; 4096] = slice[offset + 8192..offset + 12288].try_into().unwrap();
+            let c3: &[u8; 4096] = slice[offset + 12288..offset + 16384].try_into().unwrap();
+
+            let four_hashes = unsafe { crate::simd_avx2::hash_4_chunks_avx2(c0, c1, c2, c3) };
+            leaves.extend_from_slice(&four_hashes);
+            i += 4;
+        }
+    }
+
+    while i < num_full_chunks {
+        let offset = i * CHUNK_SIZE;
+        leaves.push(hash_chunk(&slice[offset..offset + CHUNK_SIZE], false));
+        i += 1;
+    }
+
+    let tail_offset = num_full_chunks * CHUNK_SIZE;
+    if tail_offset < slice.len() {
+        leaves.push(hash_chunk(&slice[tail_offset..], false));
+    }
+
+    leaves
+}
+
+#[cfg(not(target_arch = "x86_64"))]
+fn hash_chunks_accelerated(slice: &[u8]) -> Vec<[u8; 48]> {
+    slice
+        .chunks(CHUNK_SIZE)
+        .map(|chunk| hash_chunk(chunk, false))
+        .collect()
+}
+
 /// Level-by-level binary Merkle tree reduction.
 /// Guarantees bit-exact identical tree structures across multithreaded and streaming paths.
-pub fn reduce_nodes(mut current_level: Vec<[u8; 48]>) -> [u8; 48] {
+pub fn reduce_nodes(mut current_level: Vec<[u8; 48]>, is_entire_tree_root: bool) -> [u8; 48] {
     assert!(!current_level.is_empty(), "cannot reduce empty tree");
     if current_level.len() == 1 {
         return current_level[0];
     }
 
     while current_level.len() > 1 {
-        let is_root_level = current_level.len() == 2;
+        let is_root_level = is_entire_tree_root && (current_level.len() == 2);
         let has_orphan = current_level.len() % 2 == 1;
         let orphan = if has_orphan {
             current_level.pop()
@@ -98,18 +146,29 @@ pub fn reduce_nodes(mut current_level: Vec<[u8; 48]>) -> [u8; 48] {
     current_level[0]
 }
 
-/// Compute blks-384 hash over an in-memory slice using Rayon multithreading.
+/// Compute blks-384 hash over an in-memory slice using Rayon multithreading and AVX2 vectorization.
 pub fn hash_slice_parallel(data: &[u8]) -> [u8; 48] {
     if data.len() <= CHUNK_SIZE {
         return hash_chunk(data, true);
     }
 
-    let leaves: Vec<[u8; 48]> = data
-        .par_chunks(CHUNK_SIZE)
-        .map(|chunk| hash_chunk(chunk, false))
-        .collect();
+    // For inputs >= 2 subtrees (>= 512 KiB), use coarse-grained 256 KiB slicing:
+    // Each thread processes 64 chunks in its local L2 cache and reduces its own subtree,
+    // reducing Rayon scheduling and allocation overhead by a factor of 64.
+    if data.len() >= SUBTREE_BYTES * 2 {
+        let subroots: Vec<[u8; 48]> = data
+            .par_chunks(SUBTREE_BYTES)
+            .map(|slice| {
+                let leaves = hash_chunks_accelerated(slice);
+                reduce_nodes(leaves, false)
+            })
+            .collect();
 
-    reduce_nodes(leaves)
+        reduce_nodes(subroots, true)
+    } else {
+        let leaves = hash_chunks_accelerated(data);
+        reduce_nodes(leaves, true)
+    }
 }
 
 /// Incremental streaming hasher for blks-384 (e.g. stdin or network streams).
@@ -171,7 +230,7 @@ impl BlksHasher {
             self.leaf_hashes.push(final_leaf);
         }
 
-        reduce_nodes(self.leaf_hashes)
+        reduce_nodes(self.leaf_hashes, true)
     }
 }
 

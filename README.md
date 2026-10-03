@@ -74,19 +74,18 @@ Quantencomputer mit dem Grover-Algorithmus halbieren die effektive Bitstärke sy
    * Basiert auf der 64-Bit BLAKE2b-Permutation mit vollen 12 kryptografischen Runden.
    * Verarbeitet 128-Byte-Nachrichtenblöcke.
    * Eigene Domain-Separation und Initialisierungskonstanten (`BLKS_384`).
-2. **Merkle-Baum & Linux Page-Alignment:**
+   * **4-Wege AVX2-Vektor-Engine:** Verarbeitet auf x86_64 vier unabhängige 4-KiB-Chunks parallel in 256-Bit-YMM-Vektorregistern in Lockstep.
+2. **Merkle-Baum & Coarse-Grained Subtree Slicing:**
    * Leaf-Chunks sind auf **4096 Bytes (4 KiB)** dimensioniert (optimal abgestimmt auf Linux Page-Cache, NVMe-Sektoren und Direct-I/O-Blöcke).
-   * Parallele Leaf-Berechnung via `rayon` Work-Stealing über alle CPU-Kerne.
+   * Coarse-Grained Slicing: Threads bearbeiten 256-KiB-Blöcke (64 Chunks) direkt im CPU-L2-Cache und reduzieren lokale Teilbäume vorab, was Scheduling- und Allokations-Overhead um das 64-fache senkt.
    * Baumreduktion: Zwei 48-Byte Child-Hashes (zusammen 96 Bytes) passen ohne Überlauf in einen einzigen 128-Byte-Parent-Block – exakt ein Kompressionsschritt pro Elternknoten!
-3. **Zero-Copy I/O:**
-   * Automatische Speicherabbildung regulärer Dateien (`memmap2`) mit Durchsätzen von **2,15 GB/s** (über 3,5x schneller als GNU `sha384sum`).
+3. **Zero-Copy I/O & Readahead:**
+   * Automatische Speicherabbildung regulärer Dateien (`memmap2`) mit sequentiellem Kernel-Readahead (`MADV_SEQUENTIAL`) mit Durchsätzen von **5,21 GB/s** (über **8,5x schneller als GNU `sha384sum`**).
    * Deterministischer Streaming-Modus für Pipes (`stdin`) mit bit-exakter Parität zum parallelen Slice-Pfad.
+   * `--no-mmap`-Schalter zur Vermeidung von `SIGBUS`-Abstürzen auf volatilen Netzlaufwerken (NFS/CIFS).
 4. **C-FFI Schnittstelle (`include/blks.h`):**
    * Exportiert `libblks_core.a` / `libblks_core.so` für direkte Anbindung in C-Tools wie `blkcp`.
-
-### 4. Das Multi-Ring io_uring Sharding-Problem in `blkcp` gelöst
-* **Das bisherige Problem:** Bei Multi-Ring Sharding (`blkcp -j N`) musste das Tool bei gesetzter Prüfsumme bisher auf Single-Ring zurückfallen, weil sequenzielle Hashes (wie SHA-256) keine parallelen Stream-Abschnitte verarbeiten können.
-* **Die `blks`-Lösung:** Durch die baumbasierte Merkle-Architektur können die Worker-Rings in `blkcp` künftig völlig unabhängig einzelne 64-MiB-Slices in-flight hashen. Ein Lock-free Combiner reduziert die 48-Byte-Zwischenknoten am Ende in Mikrosekunden zum finalen 64-Zeichen Root-Digest – **volles Sharding-Tempo ohne Single-Ring-Flaschenhals**.
+   * Panic-Safe gekapselt via `std::panic::catch_unwind`.
 
 ---
 
@@ -94,13 +93,13 @@ Quantencomputer mit dem Grover-Algorithmus halbieren die effektive Bitstärke sy
 
 | Tool / Algorithmus | Kollisions-Sicherheit | Output-Format | Output-Länge | Zeit für 1 GB | Durchsatz |
 | :--- | :---: | :---: | :---: | :---: | :---: |
-| **`b3sum` (BLAKE3)** | 128 Bit (Flaschenhals) | Hexadezimal | 64 Zeichen | 109 ms | 9,10 GB/s |
-| **`blks` (384-Bit Tree)** | **192 Bit (Post-Quantum)** | **Base64 (clean)** | **64 Zeichen** | **464 ms** | **2,15 GB/s** |
-| **`b2sum` (BLAKE2b)** | 256 Bit | Hexadezimal | 128 Zeichen | 1.326 ms | 0,75 GB/s |
-| **`sha512sum` (SHA-512)** | 256 Bit | Hexadezimal | 128 Zeichen | 1.584 ms | 0,63 GB/s |
-| **`sha384sum` (SHA-384)** | 192 Bit | Hexadezimal | 96 Zeichen | 1.590 ms | 0,63 GB/s |
-| **`openssl sha384`** | 192 Bit | Hexadezimal | 96 Zeichen | 1.641 ms | 0,61 GB/s |
-| **`sha256sum` (SHA-256)** | 128 Bit | Hexadezimal | 64 Zeichen | 2.240 ms | 0,45 GB/s |
+| **`b3sum` (BLAKE3)** | 128 Bit (Flaschenhals) | Hexadezimal | 64 Zeichen | 113 ms | 8,78 GB/s |
+| **`blks` (384-Bit Tree)** | **192 Bit (Post-Quantum)** | **Base64 (clean)** | **64 Zeichen** | **192 ms** | **5,21 GB/s** |
+| **`b2sum` (BLAKE2b)** | 256 Bit | Hexadezimal | 128 Zeichen | 1.377 ms | 0,73 GB/s |
+| **`sha384sum` (SHA-384)** | 192 Bit | Hexadezimal | 96 Zeichen | 1.641 ms | 0,61 GB/s |
+| **`sha512sum` (SHA-512)** | 256 Bit | Hexadezimal | 128 Zeichen | 1.641 ms | 0,61 GB/s |
+| **`openssl sha384`** | 192 Bit | Hexadezimal | 96 Zeichen | 1.675 ms | 0,60 GB/s |
+| **`sha256sum` (SHA-256)** | 128 Bit | Hexadezimal | 64 Zeichen | 2.310 ms | 0,43 GB/s |
 
 ---
 
