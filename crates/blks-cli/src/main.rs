@@ -3,11 +3,11 @@
 //! Produces 384-bit digests that encode to exactly 64 Base64 characters without padding,
 //! breaking the 128-bit collision limit of BLAKE3/SHA-256 with 192 bits of collision resistance.
 
-use blks_core::{constant_time_eq, hash_file_opts, hash_reader, Digest};
+use blks_core::{constant_time_eq, hash, hash_file_opts, hash_reader, Digest};
 use clap::{CommandFactory, Parser, ValueEnum};
 use clap_complete::{generate, Shell};
 use std::fs::File;
-use std::io::{self, BufRead, BufReader};
+use std::io::{self, BufRead, BufReader, IsTerminal};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::Instant;
@@ -89,6 +89,38 @@ fn hash_stdin() -> io::Result<Digest> {
     let stdin = io::stdin();
     let bytes = hash_reader(stdin.lock())?;
     Ok(Digest(bytes))
+}
+
+fn run_builtin_benchmark(format: OutputFormat, json: bool) {
+    eprintln!("blks: running built-in benchmark (1 GiB in RAM)...");
+    let size_bytes: usize = 1024 * 1024 * 1024; // 1 GiB
+    let data = vec![0x37u8; size_bytes];
+
+    // Warm-up run
+    let _ = hash(&data[..16 * 1024 * 1024]);
+
+    let start = Instant::now();
+    let digest = hash(&data);
+    let elapsed = start.elapsed();
+    let secs = elapsed.as_secs_f64();
+    let throughput_gbs = (size_bytes as f64) / (1024.0 * 1024.0 * 1024.0) / secs;
+
+    if json {
+        println!(
+            r#"{{"benchmark":"builtin","bytes":{},"hash":"{}","algo":"blks-384","bits":384,"collision_bits":192,"throughput_gb_per_sec":{:.2},"elapsed_ms":{:.3}}}"#,
+            size_bytes,
+            format_digest(&digest, format),
+            throughput_gbs,
+            secs * 1000.0
+        );
+    } else {
+        println!(
+            "{}  [1 GiB in RAM: {:.2} GB/s, {:.2} ms]",
+            format_digest(&digest, format),
+            throughput_gbs,
+            secs * 1000.0
+        );
+    }
 }
 
 fn run_check(check_file: &Path, quiet: bool, use_mmap: bool) -> io::Result<bool> {
@@ -188,11 +220,21 @@ fn main() -> ExitCode {
         cli.format
     };
 
+    if cli.benchmark && cli.files.is_empty() {
+        run_builtin_benchmark(format, cli.json);
+        return ExitCode::SUCCESS;
+    }
+
     if let Some(check_path) = &cli.check {
         match run_check(check_path, cli.quiet, !cli.no_mmap) {
             Ok(true) => return ExitCode::SUCCESS,
             _ => return ExitCode::FAILURE,
         }
+    }
+
+    let is_interactive_stdin = cli.files.is_empty() && io::stdin().is_terminal();
+    if is_interactive_stdin {
+        eprintln!("blks: reading from standard input (press Ctrl+D to finish, or run with --help)");
     }
 
     let files = if cli.files.is_empty() {
