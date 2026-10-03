@@ -71,6 +71,7 @@ fn g(v: &mut [u64; 16], a: usize, b: usize, c: usize, d: usize, x: u64, y: u64) 
 }
 
 /// Core ARX compression function
+#[inline(always)]
 pub fn compress(
     cv: &[u64; 8],
     block: &[u8; BLOCK_BYTES],
@@ -78,8 +79,9 @@ pub fn compress(
     flags: u64,
 ) -> [u64; 8] {
     let mut m = [0u64; 16];
-    for i in 0..16 {
-        m[i] = u64::from_le_bytes(block[i * 8..(i + 1) * 8].try_into().unwrap());
+    let (chunks, _) = block.as_chunks::<8>();
+    for (chunk, slot) in chunks.iter().zip(m.iter_mut()) {
+        *slot = u64::from_le_bytes(*chunk);
     }
 
     let mut v = [0u64; 16];
@@ -113,6 +115,7 @@ pub fn compress(
 /// Compress a parent node combining two 48-byte (384-bit) child hashes.
 /// Input: left (48 bytes) and right (48 bytes) = 96 bytes.
 /// Fits cleanly into the 128-byte block without overflow!
+#[inline]
 pub fn compress_parent(left: &[u8; 48], right: &[u8; 48], is_root: bool) -> [u8; 48] {
     let mut block = [0u8; BLOCK_BYTES];
     block[0..48].copy_from_slice(left);

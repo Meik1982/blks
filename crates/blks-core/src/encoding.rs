@@ -11,18 +11,36 @@ const BASE64_URL_SAFE: &[u8; 64] =
 
 const HEX_CHARS: &[u8; 16] = b"0123456789abcdef";
 
+/// Compile-time precomputed reverse lookup table for Base64 (supporting both standard and URL-safe)
+const fn build_rev_table() -> [u8; 256] {
+    let mut table = [255u8; 256];
+    let mut i = 0;
+    while i < 64 {
+        table[BASE64_STANDARD[i] as usize] = i as u8;
+        table[BASE64_URL_SAFE[i] as usize] = i as u8;
+        i += 1;
+    }
+    table
+}
+
+const REV_TABLE: [u8; 256] = build_rev_table();
+
 /// Encode a 48-byte digest into exactly 64 standard Base64 characters.
+#[inline]
 pub fn encode_base64(bytes: &[u8; 48]) -> String {
     encode_b64_table(bytes, BASE64_STANDARD)
 }
 
 /// Encode a 48-byte digest into exactly 64 URL-safe Base64 characters.
+#[inline]
 pub fn encode_base64_url(bytes: &[u8; 48]) -> String {
     encode_b64_table(bytes, BASE64_URL_SAFE)
 }
 
+#[inline]
 fn encode_b64_table(bytes: &[u8; 48], table: &[u8; 64]) -> String {
-    let mut out = vec![0u8; 64];
+    // Stack-allocated 64-byte array to avoid intermediate heap reallocations
+    let mut out = [0u8; 64];
     for i in 0..16 {
         let b0 = bytes[i * 3] as usize;
         let b1 = bytes[i * 3 + 1] as usize;
@@ -33,17 +51,19 @@ fn encode_b64_table(bytes: &[u8; 48], table: &[u8; 64]) -> String {
         out[i * 4 + 2] = table[((b1 & 0x0F) << 2) | (b2 >> 6)];
         out[i * 4 + 3] = table[b2 & 0x3F];
     }
-    String::from_utf8(out).expect("valid ASCII")
+    // Safety: table only contains valid ASCII characters (A-Z, a-z, 0-9, +, /, -, _)
+    unsafe { String::from_utf8_unchecked(out.to_vec()) }
 }
 
 /// Encode a 48-byte digest into 96 hexadecimal characters.
+#[inline]
 pub fn encode_hex(bytes: &[u8; 48]) -> String {
-    let mut out = vec![0u8; 96];
+    let mut out = [0u8; 96];
     for (i, &b) in bytes.iter().enumerate() {
         out[i * 2] = HEX_CHARS[(b >> 4) as usize];
         out[i * 2 + 1] = HEX_CHARS[(b & 0x0F) as usize];
     }
-    String::from_utf8(out).expect("valid ASCII")
+    unsafe { String::from_utf8_unchecked(out.to_vec()) }
 }
 
 /// Decode a 64-character Base64 string into a 48-byte digest.
@@ -52,22 +72,14 @@ pub fn decode_base64(s: &str) -> Result<[u8; 48], &'static str> {
         return Err("invalid blks-384 Base64 string: must be exactly 64 characters");
     }
 
-    let mut rev = [255u8; 256];
-    for (idx, &c) in BASE64_STANDARD.iter().enumerate() {
-        rev[c as usize] = idx as u8;
-    }
-    // Also support URL-safe chars '-' and '_'
-    rev[b'-' as usize] = 62;
-    rev[b'_' as usize] = 63;
-
     let bytes_in = s.as_bytes();
     let mut out = [0u8; 48];
 
     for i in 0..16 {
-        let c0 = rev[bytes_in[i * 4] as usize];
-        let c1 = rev[bytes_in[i * 4 + 1] as usize];
-        let c2 = rev[bytes_in[i * 4 + 2] as usize];
-        let c3 = rev[bytes_in[i * 4 + 3] as usize];
+        let c0 = REV_TABLE[bytes_in[i * 4] as usize];
+        let c1 = REV_TABLE[bytes_in[i * 4 + 1] as usize];
+        let c2 = REV_TABLE[bytes_in[i * 4 + 2] as usize];
+        let c3 = REV_TABLE[bytes_in[i * 4 + 3] as usize];
 
         if c0 == 255 || c1 == 255 || c2 == 255 || c3 == 255 {
             return Err("invalid character in Base64 string");

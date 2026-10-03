@@ -68,21 +68,29 @@ pub fn reduce_nodes(mut current_level: Vec<[u8; 48]>) -> [u8; 48] {
 
     while current_level.len() > 1 {
         let is_root_level = current_level.len() == 2;
-        let num_parents = current_level.len().div_ceil(2);
-        let mut next_level = Vec::with_capacity(num_parents);
+        let has_orphan = current_level.len() % 2 == 1;
+        let orphan = if has_orphan {
+            current_level.pop()
+        } else {
+            None
+        };
 
-        let mut i = 0;
-        while i < current_level.len() {
-            if i + 1 < current_level.len() {
-                let parent =
-                    compress_parent(&current_level[i], &current_level[i + 1], is_root_level);
-                next_level.push(parent);
-                i += 2;
-            } else {
-                // Orphaned right-hand node: promote directly to the next level
-                next_level.push(current_level[i]);
-                i += 1;
-            }
+        // For large trees (>= 512 nodes per level), parallelize the layer reduction with Rayon
+        let mut next_level: Vec<[u8; 48]> = if current_level.len() >= 512 {
+            current_level
+                .par_chunks_exact(2)
+                .map(|pair| compress_parent(&pair[0], &pair[1], is_root_level))
+                .collect()
+        } else {
+            let (pairs, _) = current_level.as_chunks::<2>();
+            pairs
+                .iter()
+                .map(|pair| compress_parent(&pair[0], &pair[1], is_root_level))
+                .collect()
+        };
+
+        if let Some(orph) = orphan {
+            next_level.push(orph);
         }
         current_level = next_level;
     }
@@ -162,7 +170,7 @@ impl BlksHasher {
 /// Helper function to hash an `io::Read` stream to completion
 pub fn hash_reader<R: Read>(mut reader: R) -> io::Result<[u8; 48]> {
     let mut hasher = BlksHasher::new();
-    let mut buf = vec![0u8; 64 * 1024]; // 64 KiB I/O buffer
+    let mut buf = vec![0u8; 128 * 1024]; // 128 KiB I/O buffer for high-throughput pipe reads
     loop {
         let n = reader.read(&mut buf)?;
         if n == 0 {
