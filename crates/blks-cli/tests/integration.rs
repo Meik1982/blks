@@ -148,3 +148,114 @@ fn test_cli_json_telemetry() {
 
     let _ = fs::remove_file(test_file);
 }
+
+#[test]
+fn test_cli_nonexistent_file_exit_code() {
+    let bin = get_bin_path();
+    let output = Command::new(&bin)
+        .arg("/path/to/definitely_nonexistent_blks_file_12345.bin")
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(stderr.contains("No such file") || stderr.contains("definitely_nonexistent"));
+}
+
+#[test]
+fn test_cli_url_safe_base64() {
+    let bin = get_bin_path();
+    let temp_dir = std::env::temp_dir();
+    let test_file = temp_dir.join("blks_url_safe_sample.bin");
+    fs::write(&test_file, b"URL Safe Base64 test content").unwrap();
+
+    let output = Command::new(&bin)
+        .arg("--format")
+        .arg("base64-url")
+        .arg(&test_file)
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let b64 = String::from_utf8(output.stdout).unwrap();
+    let hash = b64.split_whitespace().next().unwrap();
+    assert_eq!(hash.len(), 64);
+    assert!(!hash.contains('+'));
+    assert!(!hash.contains('/'));
+    assert!(!hash.contains('='));
+
+    let _ = fs::remove_file(test_file);
+}
+
+#[test]
+fn test_cli_raw_output_length() {
+    let bin = get_bin_path();
+    let temp_dir = std::env::temp_dir();
+    let test_file = temp_dir.join("blks_raw_sample.bin");
+    fs::write(&test_file, b"Raw binary output test content").unwrap();
+
+    let output = Command::new(&bin)
+        .arg("--raw")
+        .arg(&test_file)
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    assert_eq!(
+        output.stdout.len(),
+        48,
+        "Raw digest must be exactly 48 bytes"
+    );
+
+    let _ = fs::remove_file(test_file);
+}
+
+#[test]
+fn test_cli_quiet_check_mode() {
+    let bin = get_bin_path();
+    let temp_dir = std::env::temp_dir();
+    let file_ok = temp_dir.join("blks_quiet_ok.txt");
+    let check_file = temp_dir.join("blks_quiet_check.txt");
+
+    fs::write(&file_ok, b"Quiet test content").unwrap();
+    let out = Command::new(&bin).arg(&file_ok).output().unwrap();
+    fs::write(&check_file, &out.stdout).unwrap();
+
+    let quiet_out = Command::new(&bin)
+        .arg("-c")
+        .arg(&check_file)
+        .arg("-q")
+        .output()
+        .unwrap();
+    assert!(quiet_out.status.success());
+    let stdout = String::from_utf8(quiet_out.stdout).unwrap();
+    assert_eq!(stdout.trim(), "", "Quiet mode must not print OK lines");
+
+    let _ = fs::remove_file(file_ok);
+    let _ = fs::remove_file(check_file);
+}
+
+#[test]
+fn test_cli_threads_concurrency() {
+    let bin = get_bin_path();
+    let temp_dir = std::env::temp_dir();
+    let test_file = temp_dir.join("blks_threads_sample.bin");
+    let data = vec![0x37u8; 150_000]; // 150 KB
+    fs::write(&test_file, &data).unwrap();
+
+    let out1 = Command::new(&bin)
+        .arg("-j")
+        .arg("1")
+        .arg(&test_file)
+        .output()
+        .unwrap();
+    let out4 = Command::new(&bin)
+        .arg("-j")
+        .arg("4")
+        .arg(&test_file)
+        .output()
+        .unwrap();
+
+    let h1 = String::from_utf8(out1.stdout).unwrap();
+    let h4 = String::from_utf8(out4.stdout).unwrap();
+    assert_eq!(h1, h4, "Thread count flag must not alter output hash");
+
+    let _ = fs::remove_file(test_file);
+}

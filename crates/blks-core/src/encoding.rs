@@ -88,8 +88,8 @@ mod tests {
     #[test]
     fn test_base64_roundtrip_and_exact_64_len() {
         let mut sample = [0u8; 48];
-        for i in 0..48 {
-            sample[i] = (i * 7 + 13) as u8;
+        for (i, byte) in sample.iter_mut().enumerate() {
+            *byte = (i * 7 + 13) as u8;
         }
 
         let b64 = encode_base64(&sample);

@@ -96,7 +96,10 @@ mod tests {
 
     #[test]
     fn test_determinism_and_parity_between_slice_and_streaming() {
-        for size in [0, 1, 127, 128, 129, 4095, 4096, 4097, 8192, 10000, 65536] {
+        for size in [
+            0, 1, 63, 64, 127, 128, 129, 255, 256, 1023, 1024, 4095, 4096, 4097, 8191, 8192, 8193,
+            12287, 12288, 12289, 16383, 16384, 16385, 32768, 65536, 131072, 500000,
+        ] {
             let data: Vec<u8> = (0..size).map(|i| (i * 31 + 7) as u8).collect();
             let d_slice = hash(&data);
 
@@ -111,6 +114,94 @@ mod tests {
             );
             assert_eq!(d_slice.to_base64().len(), 64);
             assert!(!d_slice.to_base64().contains('='));
+        }
+    }
+
+    #[test]
+    fn test_fragmented_stream_feeds() {
+        let data: Vec<u8> = (0..50000).map(|i| (i * 17 + 3) as u8).collect();
+        let expected = hash(&data);
+
+        for step in [1, 7, 32, 127, 128, 513, 1024, 4095, 4096, 4097, 8192] {
+            let mut hasher = BlksHasher::new();
+            let mut offset = 0;
+            while offset < data.len() {
+                let end = (offset + step).min(data.len());
+                hasher.update(&data[offset..end]);
+                offset = end;
+            }
+            let actual = Digest(hasher.finalize());
+            assert_eq!(
+                expected, actual,
+                "Fragmented feed with step {} produced mismatched hash",
+                step
+            );
+        }
+    }
+
+    #[test]
+    fn test_strict_avalanche_criterion_diffusion() {
+        let base_data = b"Cryptographic 384-Bit Tree-Hash Test String For Diffusion Verification!";
+        let base_hash = hash(base_data);
+
+        let mut total_flipped_bits = 0;
+        let mut tests_count = 0;
+
+        // Flip each bit in the first 32 bytes of the input
+        for byte_idx in 0..32 {
+            for bit_idx in 0..8 {
+                let mut mutated = base_data.to_vec();
+                mutated[byte_idx] ^= 1 << bit_idx;
+                let mutated_hash = hash(&mutated);
+
+                // Count flipped bits in the 48-byte (384-bit) output
+                let mut flipped = 0;
+                for i in 0..48 {
+                    let diff = base_hash.0[i] ^ mutated_hash.0[i];
+                    flipped += diff.count_ones();
+                }
+
+                total_flipped_bits += flipped;
+                tests_count += 1;
+
+                // Each individual bit flip must flip at least 120 and at most 260 bits (out of 384)
+                assert!(
+                    (120..=260).contains(&flipped),
+                    "Poor diffusion on byte {}, bit {}: flipped only {} bits",
+                    byte_idx,
+                    bit_idx,
+                    flipped
+                );
+            }
+        }
+
+        let avg_flipped = (total_flipped_bits as f64) / (tests_count as f64);
+        let diffusion_pct = (avg_flipped / 384.0) * 100.0;
+        // Ideal SAC is exactly 50.0 % (192 bits out of 384)
+        assert!(
+            (48.0..=52.0).contains(&diffusion_pct),
+            "Strict Avalanche Criterion failed: average diffusion was {:.2} % (expected ~50 %)",
+            diffusion_pct
+        );
+    }
+
+    #[test]
+    fn test_thread_concurrency_invariance() {
+        let data: Vec<u8> = (0..200_000).map(|i| (i * 13 + 5) as u8).collect();
+        let expected = hash(&data);
+
+        for threads in [1, 2, 4, 8] {
+            let pool = rayon::ThreadPoolBuilder::new()
+                .num_threads(threads)
+                .build()
+                .unwrap();
+
+            let computed = pool.install(|| hash(&data));
+            assert_eq!(
+                expected, computed,
+                "Hash changed under {} worker threads!",
+                threads
+            );
         }
     }
 
