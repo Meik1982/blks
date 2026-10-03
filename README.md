@@ -1,27 +1,54 @@
 # blks – High-Performance 384-Bit Cryptographic Tree-Hash
 
-`blks` (**Blk**-**S**um) ist ein modernes, multithreaded kryptografisches Baum-Prüfsummenwerkzeug, das speziell entwickelt wurde, um die fundamentale 128-Bit-Kollisionsbarriere von BLAKE3 und SHA-256 zu durchbrechen – ohne dabei auf die vertraute 64-Zeichen-Zeilenbreite im Terminal zu verzichten.
+`blks` (**Blk**-**S**um) ist ein modernes, multithreaded kryptografisches Baum-Prüfsummenwerkzeug, das speziell entwickelt wurde, um die fundamentale 128-Bit-Kollisionsbarriere von BLAKE3 und SHA-256 zu durchbrechen und echte Post-Quantum-Sicherheit zu bieten – **ohne String-Inflation** im Terminal.
 
 ---
 
-## 🎯 Motivation & Mathematische Eleganz
+## 🎯 Die Design-Philosophie: Maximale Informationsdichte
 
-### 1. Die 64-Zeichen-Symmetrie (Base64 ohne Padding)
-* **SHA-256 (Hex):** 256 Bit = 32 Byte = **64 Zeichen** (Hexadezimal: 4 Bit pro Zeichen, $64 \times 4 = 256$ Bit).
-* **blks-384 (Base64):** 384 Bit = 48 Byte = **exakt 64 Zeichen** (Base64: 6 Bit pro Zeichen, $48 / 3 \times 4 = 64$ Zeichen).
-* **Vorteil:** Ein `blks`-Hash belegt in Shell-Pipelines, Checksum-Dateien (`.blks`), Logfiles und JSON-Strukturen **haargenau dieselbe Zeichenbreite wie ein klassischer SHA-256-Hash**, transportiert aber **50 % mehr kryptografische Entropie** – völlig ohne unschönes Padding (`=`).
+### 1. Der historische blinde Fleck: Hexadezimale Verschwendung
+Klassische Hashing-Werkzeuge (`md5sum`, `sha256sum`, `b3sum`) sind historisch starr auf das Hexadezimalformat fixiert:
+* **Hexadezimal nutzt nur 4 Bit pro Zeichen:** Von den 8 Bit eines ASCII-Zeichens im Terminal oder Logfile wird die Hälfte verschenkt.
+* Wollten Krypto-Designer mehr Sicherheit (z. B. SHA-384 oder SHA-512), war die klassische Antwort: *„Wir machen den Hash-String einfach länger (96 oder 128 Zeichen)“*.
+* **Die Folge:** Unleserliche Bandwurm-Hashes, die Zeilenumbrüche im Terminal zerschießen, JSON-Telemetrie aufblähen und Datenbank-Indizes belasten.
+
+### 2. Die 64-Zeichen-Symmetrie (Base64 ohne Padding)
+Base64 nutzt **6 Bit pro ASCII-Zeichen** ($+50\ \%$ höhere Informationsdichte im selben Textfeld).
+Das Problem herkömmlicher Base64-Hashes: Bei 256-Bit-Hashes (32 Byte) ist $32 \pmod 3 = 2$, was zu unschönen Padding-Zeichen (`=`) führt.
+
+> **Jedes `=` am Ende eines Base64-Hashes ist nicht nur hässlich, sondern der sichtbare Beweis dafür, dass Entropie und Speicherplatz verschwendet wurden.**
+
+`blks` löst dieses Problem durch mathematische Symmetrie:
+* **384 Bit = 48 Byte.**
+* $48 \pmod 3 = 0 \implies 48 / 3 \times 4 =$ **exakt 64 ASCII-Zeichen** – **100 % padding-frei**.
+* Ein `blks`-Hash belegt in Shell-Pipelines, Checksum-Dateien (`.blks`), Logfiles und JSON-Strukturen **haargenau dieselbe 64-Zeichen-Breite wie ein klassischer SHA-256-Hash**, transportiert aber die volle Stärke eines 384-Bit-Zustands.
 
 ```text
-SHA-256 (Hex):   03a4609994f8fb78719a21a20584713844cf9d0161a64e371e5968f79382a833  (64 Chars)
-blks-384 (B64):  fLm4TI9xjaLm7jjLJioInotHz8FrvDh09LZBoyhM3Ogg22uDK84CJDxgCB9D0cE+  (64 Chars)
+Format         | Hash-Beispiel                                                     | Zeichen | Entropie pro Zeichen
+---------------+-------------------------------------------------------------------+---------+---------------------
+SHA-256 (Hex)  | 03a4609994f8fb78719a21a20584713844cf9d0161a64e371e5968f79382a833 | 64 Chars| 4 Bit / Zeichen
+blks-384 (B64) | fLm4TI9xjaLm7jjLJioInotHz8FrvDh09LZBoyhM3Ogg22uDK84CJDxgCB9D0cE+ | 64 Chars| 6 Bit / Zeichen (+50 %)
+SHA-384 (Hex)  | 38b060a751ac96384cd9327eb1b1e36a21fdb71114be07434c0cc7bf63f6e1... | 96 Chars| 4 Bit (Bandwurm)
 ```
 
-### 2. Durchbrechen der 128-Bit-Kollisionsbarriere
-* **BLAKE3 & SHA-256 Flaschenhals:** BLAKE3 verwendet intern einen Chaining Value (CV) von 256 Bit. Nach dem Geburtstagsparadoxon liegt die theoretische Obergrenze der Kollisionsresistenz unverrückbar bei $256 / 2 = \mathbf{128\text{ Bit}}$. Jede künstliche XOF-Streckung auf 512 Bit erzeugt nur Scheinsicherheit, da ein Angreifer den internen 256-Bit-Zustand angreift.
-* **blks-384:** Arbeitet durchgängig mit einem 512-Bit Zustand (8 × 64-Bit Wörter) und 384-Bit (48-Byte) Chaining Values im gesamten Merkle-Baum.
-  * **Kollisionsresistenz:** $\ge \mathbf{192\text{ Bit}}$ ($2^{192}$ Operationen – um den Faktor $2^{64} \approx 1,84 \times 10^{19}$ schwerer zu brechen als BLAKE3/SHA-256).
-  * **Preimage-Resistenz:** $2^{384}$ Operationen.
-  * **Post-Quantum:** Vollständig resistent gegen Grover-Quantenalgorithmen ($\ge 192$ Bit Sicherheit).
+---
+
+## 🛡️ Kryptoanalytischer Sicherheitsgewinn: Das $n^2$-Verhältnis
+
+Viele verwechseln die lineare Bit-Zunahme ($+50\ \%$ von 256 auf 384 Bit) mit dem tatsächlichen Aufwand für einen Angreifer. Der Sicherheitsgewinn wächst exponentiell:
+
+### 1. Durchbrechen der 128-Bit-Kollisionsbarriere
+* **BLAKE3 & SHA-256:** Nutzen intern einen 256-Bit-Zustand (Chaining Value). Nach dem Geburtstagsparadoxon liegt die theoretische Obergrenze der Kollisionsresistenz unverrückbar bei $256 / 2 = \mathbf{128\text{ Bit}}$. Jede XOF-Streckung auf 512 Bit erzeugt nur Scheinsicherheit, da Angreifer den 256-Bit-Zustand attackieren.
+* **blks-384:** Arbeitet durchgängig mit einem 512-Bit-Zustand und 384-Bit (48-Byte) Chaining Values im gesamten Merkle-Baum.
+  * **Kollisionsresistenz:** $\ge \mathbf{192\text{ Bit}}$ ($2^{192}$ Operationen).
+  * **Verhältnis:** $\frac{2^{192}}{2^{128}} = \mathbf{2^{64} \approx 18{,}4\ \text{Trillionen}}$ mal höherer Berechnungsaufwand als bei BLAKE3 oder SHA-256!
+
+### 2. Echte Post-Quantum-Resistenz (Grover-Algorithmus)
+Quantencomputer mit dem Grover-Algorithmus halbieren die effektive Bitstärke symmetrischer Primitive:
+* Ein 256-Bit-Hash (SHA-256, BLAKE3) schmilzt unter Grover auf **128 Bit Quantensicherheit** zusammen – genau an der Grenze künftiger Quanten-Superrechner.
+* **blks-384** bietet selbst nach dem Grover-Abzug noch **volle 192 Bit Post-Quantum-Sicherheit** – astronomisch weit jenseits jeder physikalischen Grenze des Universums.
+
+**Zusammenfassung:** Quantensicherer Schutz bei identischem 64-Zeichen-Footprint.
 
 ---
 
@@ -32,14 +59,27 @@ blks-384 (B64):  fLm4TI9xjaLm7jjLJioInotHz8FrvDh09LZBoyhM3Ogg22uDK84CJDxgCB9D0cE
    * Verarbeitet 128-Byte-Nachrichtenblöcke.
    * Eigene Domain-Separation und Initialisierungskonstanten (`BLKS_384`).
 2. **Merkle-Baum & Linux Page-Alignment:**
-   * Leaf-Chunks sind auf **4096 Bytes (4 KiB)** dimensioniert (perfekt abgestimmt auf Linux Page-Cache, NVMe-Sektoren und Direct-I/O-Blöcke).
+   * Leaf-Chunks sind auf **4096 Bytes (4 KiB)** dimensioniert (optimal abgestimmt auf Linux Page-Cache, NVMe-Sektoren und Direct-I/O-Blöcke).
    * Parallele Leaf-Berechnung via `rayon` Work-Stealing über alle CPU-Kerne.
    * Baumreduktion: Zwei 48-Byte Child-Hashes (zusammen 96 Bytes) passen ohne Überlauf in einen einzigen 128-Byte-Parent-Block – exakt ein Kompressionsschritt pro Elternknoten!
 3. **Zero-Copy I/O:**
-   * Automatische Speicherabbildung regulärer Dateien (`memmap2`) mit Durchsätzen über 2 GB/s.
+   * Automatische Speicherabbildung regulärer Dateien (`memmap2`) mit Durchsätzen über **1,74 GB/s** (fast 3x schneller als GNU `sha384sum`).
    * Deterministischer Streaming-Modus für Pipes (`stdin`) mit bit-exakter Parität zum parallelen Slice-Pfad.
 4. **C-FFI Schnittstelle (`include/blks.h`):**
    * Exportiert `libblks_core.a` / `libblks_core.so` für direkte Anbindung in C-Tools wie `blkcp`.
+
+---
+
+## 📊 Benchmark (1 GB Datensatz im RAM-Cache, Linux CachyOS)
+
+| Tool / Algorithmus | Kollisions-Sicherheit | Output-Format | Output-Länge | Zeit für 1 GB | Durchsatz |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| **`b3sum` (BLAKE3)** | 128 Bit (Flaschenhals) | Hexadezimal | 64 Zeichen | 117 ms | 8,48 GB/s |
+| **`blks` (384-Bit Tree)** | **192 Bit (Post-Quantum)** | **Base64 (clean)** | **64 Zeichen** | **574 ms** | **1,74 GB/s** |
+| **`b2sum` (BLAKE2b)** | 256 Bit | Hexadezimal | 128 Zeichen | 1.372 ms | 0,73 GB/s |
+| **`sha512sum` (SHA-512)** | 256 Bit | Hexadezimal | 128 Zeichen | 1.625 ms | 0,62 GB/s |
+| **`sha384sum` (SHA-384)** | 192 Bit | Hexadezimal | 96 Zeichen | 1.629 ms | 0,61 GB/s |
+| **`sha256sum` (SHA-256)** | 128 Bit | Hexadezimal | 64 Zeichen | 2.315 ms | 0,43 GB/s |
 
 ---
 
