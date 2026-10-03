@@ -4,14 +4,25 @@
 //! personalized for blks-384, operating on 128-byte message blocks and 512-bit
 //! internal states truncated to 384-bit (48-byte) chaining values.
 
+/// Message block size for the 64-bit ARX compression engine in bytes (16 x 64-bit words)
 pub const BLOCK_BYTES: usize = 128;
-pub const DIGEST_BYTES: usize = 48; // 384 bits = 48 bytes
-pub const CV_WORDS: usize = 8; // 8 x 64-bit = 512-bit internal state
 
-/// Tree and domain separation flags
+/// Output digest size in bytes (384 bits = 48 bytes)
+pub const DIGEST_BYTES: usize = 48;
+
+/// Number of 64-bit words in the internal chaining value (512-bit state)
+pub const CV_WORDS: usize = 8;
+
+/// Flag indicating the first block of a chunk
 pub const FLAG_CHUNK_START: u64 = 1 << 0;
+
+/// Flag indicating the final block of a chunk
 pub const FLAG_CHUNK_END: u64 = 1 << 1;
+
+/// Flag indicating a parent node merging two child hashes
 pub const FLAG_PARENT: u64 = 1 << 2;
+
+/// Flag indicating the final root node of the Merkle tree
 pub const FLAG_ROOT: u64 = 1 << 3;
 
 /// Standard 64-bit initialization vectors (fractional parts of square roots of first 8 primes)

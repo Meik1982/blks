@@ -127,6 +127,7 @@ impl Default for BlksHasher {
 }
 
 impl BlksHasher {
+    /// Creates a new streaming hasher with an empty internal chunk buffer and leaf stack.
     pub fn new() -> Self {
         Self {
             buffer: Vec::with_capacity(CHUNK_SIZE),
@@ -135,6 +136,10 @@ impl BlksHasher {
         }
     }
 
+    /// Feeds a slice of data into the incremental hasher.
+    ///
+    /// Chunks are buffered in memory up to 4 KiB and hashed automatically as soon as a full
+    /// chunk boundary is reached and further data arrives.
     pub fn update(&mut self, mut input: &[u8]) {
         self.total_bytes += input.len() as u64;
 
@@ -152,6 +157,9 @@ impl BlksHasher {
         }
     }
 
+    /// Finalizes the stream and returns the 384-bit (48-byte) Merkle root hash.
+    ///
+    /// Consumes the hasher and guarantees bit-exact identical output to one-shot parallel slice hashing.
     pub fn finalize(mut self) -> [u8; 48] {
         if self.leaf_hashes.is_empty() {
             // Entire input fits in single chunk buffer (<= 4096 bytes)

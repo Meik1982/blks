@@ -79,10 +79,14 @@ Quantencomputer mit dem Grover-Algorithmus halbieren die effektive Bitstärke sy
    * Parallele Leaf-Berechnung via `rayon` Work-Stealing über alle CPU-Kerne.
    * Baumreduktion: Zwei 48-Byte Child-Hashes (zusammen 96 Bytes) passen ohne Überlauf in einen einzigen 128-Byte-Parent-Block – exakt ein Kompressionsschritt pro Elternknoten!
 3. **Zero-Copy I/O:**
-   * Automatische Speicherabbildung regulärer Dateien (`memmap2`) mit Durchsätzen über **1,74 GB/s** (fast 3x schneller als GNU `sha384sum`).
+   * Automatische Speicherabbildung regulärer Dateien (`memmap2`) mit Durchsätzen von **2,15 GB/s** (über 3,5x schneller als GNU `sha384sum`).
    * Deterministischer Streaming-Modus für Pipes (`stdin`) mit bit-exakter Parität zum parallelen Slice-Pfad.
 4. **C-FFI Schnittstelle (`include/blks.h`):**
    * Exportiert `libblks_core.a` / `libblks_core.so` für direkte Anbindung in C-Tools wie `blkcp`.
+
+### 4. Das Multi-Ring io_uring Sharding-Problem in `blkcp` gelöst
+* **Das bisherige Problem:** Bei Multi-Ring Sharding (`blkcp -j N`) musste das Tool bei gesetzter Prüfsumme bisher auf Single-Ring zurückfallen, weil sequenzielle Hashes (wie SHA-256) keine parallelen Stream-Abschnitte verarbeiten können.
+* **Die `blks`-Lösung:** Durch die baumbasierte Merkle-Architektur können die Worker-Rings in `blkcp` künftig völlig unabhängig einzelne 64-MiB-Slices in-flight hashen. Ein Lock-free Combiner reduziert die 48-Byte-Zwischenknoten am Ende in Mikrosekunden zum finalen 64-Zeichen Root-Digest – **volles Sharding-Tempo ohne Single-Ring-Flaschenhals**.
 
 ---
 
@@ -90,12 +94,13 @@ Quantencomputer mit dem Grover-Algorithmus halbieren die effektive Bitstärke sy
 
 | Tool / Algorithmus | Kollisions-Sicherheit | Output-Format | Output-Länge | Zeit für 1 GB | Durchsatz |
 | :--- | :---: | :---: | :---: | :---: | :---: |
-| **`b3sum` (BLAKE3)** | 128 Bit (Flaschenhals) | Hexadezimal | 64 Zeichen | 117 ms | 8,48 GB/s |
-| **`blks` (384-Bit Tree)** | **192 Bit (Post-Quantum)** | **Base64 (clean)** | **64 Zeichen** | **574 ms** | **1,74 GB/s** |
-| **`b2sum` (BLAKE2b)** | 256 Bit | Hexadezimal | 128 Zeichen | 1.372 ms | 0,73 GB/s |
-| **`sha512sum` (SHA-512)** | 256 Bit | Hexadezimal | 128 Zeichen | 1.625 ms | 0,62 GB/s |
-| **`sha384sum` (SHA-384)** | 192 Bit | Hexadezimal | 96 Zeichen | 1.629 ms | 0,61 GB/s |
-| **`sha256sum` (SHA-256)** | 128 Bit | Hexadezimal | 64 Zeichen | 2.315 ms | 0,43 GB/s |
+| **`b3sum` (BLAKE3)** | 128 Bit (Flaschenhals) | Hexadezimal | 64 Zeichen | 109 ms | 9,10 GB/s |
+| **`blks` (384-Bit Tree)** | **192 Bit (Post-Quantum)** | **Base64 (clean)** | **64 Zeichen** | **464 ms** | **2,15 GB/s** |
+| **`b2sum` (BLAKE2b)** | 256 Bit | Hexadezimal | 128 Zeichen | 1.326 ms | 0,75 GB/s |
+| **`sha512sum` (SHA-512)** | 256 Bit | Hexadezimal | 128 Zeichen | 1.584 ms | 0,63 GB/s |
+| **`sha384sum` (SHA-384)** | 192 Bit | Hexadezimal | 96 Zeichen | 1.590 ms | 0,63 GB/s |
+| **`openssl sha384`** | 192 Bit | Hexadezimal | 96 Zeichen | 1.641 ms | 0,61 GB/s |
+| **`sha256sum` (SHA-256)** | 128 Bit | Hexadezimal | 64 Zeichen | 2.240 ms | 0,45 GB/s |
 
 ---
 

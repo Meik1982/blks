@@ -8,6 +8,8 @@
 //! - **192-Bit Collision Resistance:** Breaks the 128-bit birthday-paradox bottleneck of BLAKE3/SHA-256.
 //! - **Multi-Core Merkle Tree:** Leverages Rayon work-stealing parallelism and Linux page-aligned 4 KiB chunks.
 
+#![warn(missing_docs)]
+
 pub mod compress;
 pub mod encoding;
 pub mod ffi;
@@ -27,22 +29,27 @@ use std::path::Path;
 pub struct Digest(pub [u8; 48]);
 
 impl Digest {
+    /// Returns the raw 48-byte array slice of the digest.
     pub fn as_bytes(&self) -> &[u8; 48] {
         &self.0
     }
 
+    /// Formats the digest as a 64-character standard Base64 string without padding.
     pub fn to_base64(&self) -> String {
         encode_base64(&self.0)
     }
 
+    /// Formats the digest as a 64-character URL-safe Base64 string without padding.
     pub fn to_base64_url(&self) -> String {
         encode_base64_url(&self.0)
     }
 
+    /// Formats the digest as a 96-character lowercase hexadecimal string.
     pub fn to_hex(&self) -> String {
         encode_hex(&self.0)
     }
 
+    /// Parses a 64-character Base64 string back into a 384-bit digest.
     pub fn from_base64(s: &str) -> Result<Self, &'static str> {
         let bytes = decode_base64(s)?;
         Ok(Digest(bytes))
