@@ -4,6 +4,22 @@
 
 ---
 
+## 💡 Entstehungsgeschichte & Urheberschaft (Genesis)
+
+Der Ansatz und die mathematische Konzeption von `blks` entstanden im Oktober 2026 im Rahmen der kryptografischen Härtung von **`blkcp`** (dem modernen Linux High-Performance I/O- und Block-Kopierwerkzeug).
+
+Bei der Analyse der in `blkcp` integrierten BLAKE3-Prüfsummen stellte **Meik** die entscheidende kryptoanalytische Frage:
+> *„Der Chaining Value von BLAKE3 ist fest auf 256 Bit begrenzt – mehr als 128 Bit Kollisionsresistenz lässt der Algorithmus strukturell nicht zu, alles darüber hinaus verdünnt die Sicherheit nur ohne Mehrwert. Können wir einen echten Tree-Hash schreiben, der signifikant mehr Kollisionsresistenz besitzt – z. B. 384 Bit –, der in Base64 exakt 64 Zeichen ohne jedes Padding ergibt und damit haargenau dieselbe Zeilenbreite wie ein hexadezimaler SHA-256-Hash einnimmt?“*
+
+Aus diesem Gedanken entstand der architektonische Durchbruch:
+1. **$50\ \%$ mehr Bits bedeuten exponentielle ($n^2$) Sicherheit:** Statt $2^{128}$ Operationen erfordert das Brechen einer 384-Bit-Kollision $2^{192}$ Operationen – ein astronomischer Sicherheitsgewinn um den Faktor **$2^{64} \approx 18{,}4\ \text{Trillionen}$**.
+2. **Grover-Quantenresistenz ohne String-Inflation:** Während 256-Bit-Hashes unter Quantencomputern auf 128 Bit schrumpfen, behält `blks-384` volle **192 Bit Post-Quantum-Sicherheit** – bei identischem 64-Zeichen-Footprint im Terminal.
+3. **Beseitigung der Padding-Verschwendung:** $48 \text{ Bytes} \pmod 3 = 0 \implies$ **exakt 64 Zeichen**, ohne ein einziges `=`-Padding-Zeichen.
+
+Um diesen Algorithmus unabhängig von `blkcp` isoliert zu entwickeln, mathematisch zu verifizieren und mit Benchmark-Suites zu testen, wurde `blks` als autarkes Rust-Projekt mit nativer C-FFI-Schnittstelle ins Leben gerufen.
+
+---
+
 ## 🎯 Die Design-Philosophie: Maximale Informationsdichte
 
 ### 1. Der historische blinde Fleck: Hexadezimale Verschwendung
