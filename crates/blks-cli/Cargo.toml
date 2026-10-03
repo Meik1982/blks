@@ -1,0 +1,16 @@
+[package]
+name = "blks-cli"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "blks"
+path = "src/main.rs"
+
+[dependencies]
+blks-core = { path = "../blks-core" }
+clap = { version = "4.5", features = ["derive"] }
+memmap2 = "0.9"
+rayon = "1.10"

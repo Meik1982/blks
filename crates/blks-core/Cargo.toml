@@ -1,0 +1,16 @@
+[package]
+name = "blks-core"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[lib]
+name = "blks_core"
+crate-type = ["lib", "staticlib", "cdylib"]
+
+[dependencies]
+rayon = "1.10"
+memmap2 = "0.9"
+
+[dev-dependencies]
