@@ -19,6 +19,7 @@ extern "C" {
 #define BLKS_HEX_CHARS    96
 
 typedef struct BlksHasher BlksHasher;
+typedef struct BlksHasher blks_hasher_t;
 
 /**
  * Compute blks-384 hash over a memory buffer into a 48-byte buffer.
