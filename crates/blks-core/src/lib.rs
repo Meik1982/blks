@@ -102,7 +102,8 @@ pub fn hash_file_opts<P: AsRef<Path>>(path: P, use_mmap: bool) -> io::Result<Dig
         // Safe fast-path with memory-mapping for files > 0 bytes
         match unsafe { Mmap::map(&file) } {
             Ok(mmap) => {
-                // Advise kernel for aggressive sequential readahead
+                // Advise kernel for aggressive sequential readahead on Unix
+                #[cfg(unix)]
                 let _ = mmap.advise(memmap2::Advice::Sequential);
                 Ok(hash(&mmap))
             }
