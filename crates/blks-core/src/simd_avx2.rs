@@ -17,15 +17,29 @@ unsafe fn rotr64_32(x: __m256i) -> __m256i {
 }
 
 #[cfg(target_arch = "x86_64")]
+const ROTR24_MASK: [i8; 32] = [
+    3, 4, 5, 6, 7, 0, 1, 2, 11, 12, 13, 14, 15, 8, 9, 10, 3, 4, 5, 6, 7, 0, 1, 2, 11, 12, 13, 14,
+    15, 8, 9, 10,
+];
+
+#[cfg(target_arch = "x86_64")]
+const ROTR16_MASK: [i8; 32] = [
+    2, 3, 4, 5, 6, 7, 0, 1, 10, 11, 12, 13, 14, 15, 8, 9, 2, 3, 4, 5, 6, 7, 0, 1, 10, 11, 12, 13,
+    14, 15, 8, 9,
+];
+
+#[cfg(target_arch = "x86_64")]
 #[inline(always)]
 unsafe fn rotr64_24(x: __m256i) -> __m256i {
-    _mm256_or_si256(_mm256_srli_epi64(x, 24), _mm256_slli_epi64(x, 40))
+    let mask = _mm256_loadu_si256(ROTR24_MASK.as_ptr() as *const __m256i);
+    _mm256_shuffle_epi8(x, mask)
 }
 
 #[cfg(target_arch = "x86_64")]
 #[inline(always)]
 unsafe fn rotr64_16(x: __m256i) -> __m256i {
-    _mm256_or_si256(_mm256_srli_epi64(x, 16), _mm256_slli_epi64(x, 48))
+    let mask = _mm256_loadu_si256(ROTR16_MASK.as_ptr() as *const __m256i);
+    _mm256_shuffle_epi8(x, mask)
 }
 
 #[cfg(target_arch = "x86_64")]
