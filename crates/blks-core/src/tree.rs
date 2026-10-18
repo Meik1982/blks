@@ -199,20 +199,51 @@ impl BlksHasher {
     ///
     /// Chunks are buffered in memory up to 4 KiB and hashed automatically as soon as a full
     /// chunk boundary is reached and further data arrives.
+    /// Automatically utilizes 4-Way AVX2 vector instructions for multi-chunk buffers.
     pub fn update(&mut self, mut input: &[u8]) {
         self.total_bytes += input.len() as u64;
 
-        while !input.is_empty() {
-            if self.buffer.len() == CHUNK_SIZE {
-                let leaf_hash = hash_chunk(&self.buffer, false);
-                self.leaf_hashes.push(leaf_hash);
-                self.buffer.clear();
-            }
+        // 1. If buffer has a pending complete chunk and more data arrives, hash it
+        if self.buffer.len() == CHUNK_SIZE && !input.is_empty() {
+            let leaf_hash = hash_chunk(&self.buffer, false);
+            self.leaf_hashes.push(leaf_hash);
+            self.buffer.clear();
+        }
 
+        // 2. If buffer has a partial chunk, fill it up first
+        if !self.buffer.is_empty() {
             let available = CHUNK_SIZE - self.buffer.len();
             let to_take = available.min(input.len());
             self.buffer.extend_from_slice(&input[..to_take]);
             input = &input[to_take..];
+
+            if self.buffer.len() == CHUNK_SIZE && !input.is_empty() {
+                let leaf_hash = hash_chunk(&self.buffer, false);
+                self.leaf_hashes.push(leaf_hash);
+                self.buffer.clear();
+            } else {
+                return;
+            }
+        }
+
+        // 3. Buffer is now empty: Bulk-process full chunks directly from input with AVX2
+        if input.len() > CHUNK_SIZE {
+            let hashable_len = if input.len().is_multiple_of(CHUNK_SIZE) {
+                input.len() - CHUNK_SIZE
+            } else {
+                (input.len() / CHUNK_SIZE) * CHUNK_SIZE
+            };
+
+            if hashable_len > 0 {
+                let leaves = hash_chunks_accelerated(&input[..hashable_len]);
+                self.leaf_hashes.extend_from_slice(&leaves);
+                input = &input[hashable_len..];
+            }
+        }
+
+        // 4. Retain any trailing bytes (<= 4096) in the buffer
+        if !input.is_empty() {
+            self.buffer.extend_from_slice(input);
         }
     }
 

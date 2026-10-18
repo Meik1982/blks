@@ -90,17 +90,22 @@ pub unsafe fn hash_4_chunks_avx2(
         _mm256_set1_epi64x(IV[7] as i64),
     ];
 
+    let (c0_words, _) = c0.as_chunks::<8>();
+    let (c1_words, _) = c1.as_chunks::<8>();
+    let (c2_words, _) = c2.as_chunks::<8>();
+    let (c3_words, _) = c3.as_chunks::<8>();
+
     // 4096 bytes / 128 bytes = 32 blocks per chunk
     for blk_idx in 0..32 {
-        let offset = blk_idx * BLOCK_BYTES;
+        let word_base = blk_idx * 16;
         let mut m = [_mm256_setzero_si256(); 16];
 
         for (w, slot) in m.iter_mut().enumerate() {
-            let byte_pos = offset + w * 8;
-            let val0 = u64::from_le_bytes(c0[byte_pos..byte_pos + 8].try_into().unwrap());
-            let val1 = u64::from_le_bytes(c1[byte_pos..byte_pos + 8].try_into().unwrap());
-            let val2 = u64::from_le_bytes(c2[byte_pos..byte_pos + 8].try_into().unwrap());
-            let val3 = u64::from_le_bytes(c3[byte_pos..byte_pos + 8].try_into().unwrap());
+            let idx = word_base + w;
+            let val0 = u64::from_le_bytes(c0_words[idx]);
+            let val1 = u64::from_le_bytes(c1_words[idx]);
+            let val2 = u64::from_le_bytes(c2_words[idx]);
+            let val3 = u64::from_le_bytes(c3_words[idx]);
             *slot = _mm256_set_epi64x(val3 as i64, val2 as i64, val1 as i64, val0 as i64);
         }
 

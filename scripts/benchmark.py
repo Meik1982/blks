@@ -37,6 +37,10 @@ def benchmark():
         try:
             results = []
             for name, cmd in TOOLS:
+                import shutil
+                if not (os.path.exists(cmd[0]) or shutil.which(cmd[0])):
+                    continue
+
                 # Warm-up run
                 subprocess.run(cmd + [path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 
